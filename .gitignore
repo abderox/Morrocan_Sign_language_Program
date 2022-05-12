@@ -4,7 +4,6 @@ models/*.cfg
 models/*.weights
 /asl
 *.pyc
-*.h5
+
 /venv
 /readme
-*.npy

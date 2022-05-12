@@ -2,8 +2,6 @@
 /venv
 models/*.cfg
 models/*.weights
-/asl
 *.pyc
-
 /venv
 /readme

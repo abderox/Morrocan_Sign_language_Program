@@ -4,9 +4,15 @@ import cv2
 import pyttsx3
 from predict import *
 
+import arabic_reshaper
+from bidi.algorithm import get_display
+from PIL import ImageFont, ImageDraw, Image
+
 
 from yolo import YOLO
 
+reshaped_text = arabic_reshaper.reshape(" ")
+sentence = ""
 engine = pyttsx3.init()
 engine.setProperty('rate', 105)
 engine.setProperty('voice', 1)
@@ -18,28 +24,33 @@ ap.add_argument('-n', '--network', default="normal", choices=["normal", "tiny", 
 ap.add_argument('-d', '--device', type=int, default=0, help='Device to use')
 ap.add_argument('-s', '--size', default=416, help='Size for yolo')
 ap.add_argument('-c', '--confidence', default=0.2, help='Confidence for yolo')
-ap.add_argument('-nh', '--hands', default=-1, help='Total number of hands to be detected per frame (-1 for all)')
+ap.add_argument('-nh', '--hands', default=-1,
+                help='Total number of hands to be detected per frame (-1 for all)')
 args = ap.parse_args()
 
 if args.network == "normal":
     print("loading yolo...")
-    yolo = YOLO("models/cross-hands.cfg", "models/cross-hands.weights", ["hand"])
+    yolo = YOLO("models/cross-hands.cfg",
+                "models/cross-hands.weights", ["hand"])
 elif args.network == "prn":
     print("loading yolo-tiny-prn...")
-    yolo = YOLO("models/cross-hands-tiny-prn.cfg", "models/cross-hands-tiny-prn.weights", ["hand"])
+    yolo = YOLO("models/cross-hands-tiny-prn.cfg",
+                "models/cross-hands-tiny-prn.weights", ["hand"])
 elif args.network == "v4-tiny":
     print("loading yolov4-tiny-prn...")
-    yolo = YOLO("models/cross-hands-yolov4-tiny.cfg", "models/cross-hands-yolov4-tiny.weights", ["hand"])
+    yolo = YOLO("models/cross-hands-yolov4-tiny.cfg",
+                "models/cross-hands-yolov4-tiny.weights", ["hand"])
 else:
     print("loading yolo-tiny...")
-    yolo = YOLO("models/cross-hands-tiny.cfg", "models/cross-hands-tiny.weights", ["hand"])
+    yolo = YOLO("models/cross-hands-tiny.cfg",
+                "models/cross-hands-tiny.weights", ["hand"])
 
 yolo.size = int(args.size)
 yolo.confidence = float(args.confidence)
 
 print("starting webcam...")
 cv2.namedWindow("preview")
-vc = cv2.VideoCapture(args.device)
+vc = cv2.VideoCapture(0)
 
 if vc.isOpened():  # try to get the first frame
     rval, frame = vc.read()
@@ -50,7 +61,8 @@ while rval:
     width, height, inference_time, results = yolo.inference(frame)
 
     # display fps
-    cv2.putText(frame, f'{round(1/inference_time,2)} FPS', (15,15), cv2.FONT_HERSHEY_SIMPLEX,0.5, (0,255,255), 2)
+    cv2.putText(frame, f'{round(1/inference_time,2)} FPS',
+                (15, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
 
     # sort by confidence
     results.sort(key=lambda x: x[2])
@@ -63,11 +75,15 @@ while rval:
     # display hands
     for detection in results[:hand_count]:
         id, name, confidence, x, y, w, h = detection
+
+        h += 20
+        w += 20
+
         cx = x + (w / 2)
         cy = y + (h / 2)
 
         # draw a bounding box rectangle and label on the image
-        if confidence > 0.45 :
+        if confidence > 0.45:
             color = (0, 255, 255)
             cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
             text = "%s (%s)" % (name, round(confidence, 2))
@@ -81,7 +97,8 @@ while rval:
             skin_ycrcb_min = np.array((0, 138, 67))
             skin_ycrcb_max = np.array((255, 173, 133))
 
-            mask = cv2.inRange(blur, skin_ycrcb_min, skin_ycrcb_max)  # detecting the hand in the bounding box
+            # detecting the hand in the bounding box
+            mask = cv2.inRange(blur, skin_ycrcb_min, skin_ycrcb_max)
 
             kernel = np.ones((2, 2), dtype=np.uint8)
 
@@ -89,7 +106,10 @@ while rval:
             mask = cv2.dilate(mask, kernel, iterations=1)
 
             naya = cv2.bitwise_and(img1, img1, mask=mask)
-            
+
+            cv2.imshow("naya", naya)
+            cv2.imshow("mask", mask)
+
             hand_bg_rm = naya
             hand = img1
 
@@ -114,27 +134,30 @@ while rval:
             # If  valid hand area is cropped
             if hand.shape[0] != 0 and hand.shape[1] != 0:
                 conf, label = which(hand_bg_rm)
-                if conf >= THRESHOLD:
-                    cv2.putText(frame, label, (x, y - 5),cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5, color, 2)
                 if c == ord('n') or c == ord('N'):
                     sentence += label
-            
-            cv2.putText(frame, sentence, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5, color, 2)
-           
+                    # reshaped_text = arabic_reshaper.reshape(sentence)
+
+            if sentence != '':
+                reshaped_text = arabic_reshaper.reshape(sentence)
+            else:
+                reshaped_text = arabic_reshaper.reshape(label)
+
+            bidi_text = get_display(reshaped_text)
+            fontpath = "arial.ttf"
+            font = ImageFont.truetype(fontpath, 52)
+            img_pil = Image.fromarray(frame)
+            draw = ImageDraw.Draw(img_pil)
+            draw.text((x, y - 53), bidi_text, font=font)
+            frame = np.array(img_pil)
 
     cv2.imshow("preview", frame)
 
     rval, frame = vc.read()
 
     key = cv2.waitKey(20)
-    if key == 27:  
+    if key == 27:
         break
 
 cv2.destroyWindow("preview")
 vc.release()
-
-
-
-
